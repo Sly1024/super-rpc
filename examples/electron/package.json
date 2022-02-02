@@ -1,0 +1,21 @@
+{
+    "name": "super-rpc-electron-example",
+    "version": "1.0.0",
+    "description": "Example usage of SuperRPC with Electron",
+    "scripts": {
+        "build": "tsc && rollup -c",
+        "start": "electron --inspect ./dist/app.js"
+    },
+    "author": "szilveszter.safar@gmail.com",
+    "license": "MIT",
+    "dependencies": {
+        "electron": "^15.3.3",
+        "nanoid": "^3.1.30"
+    },
+    "devDependencies": {
+        "@rollup/plugin-commonjs": "^21.0.1",
+        "rollup": "^2.67.0",
+        "rollup-plugin-node-resolve": "^5.2.0",
+        "rollup-plugin-sourcemaps": "^0.6.3"
+    }
+}

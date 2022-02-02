@@ -1,0 +1,30 @@
+{
+    "name": "super-rpc",
+    "version": "1.0.0",
+    "description": "Object based RPC through any channel",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Sly1024/super-rpc.git"
+    },
+    "scripts": {
+        "lint": "eslint --ext .ts .",
+        "test": "jest --preset ts-jest --coverage",
+        "build": "rimraf ./dist && tsc",
+        "watch": "tsc -w",
+        "doc": "typedoc --excludeInternal --entryPointStrategy expand ./src"
+    },
+    "author": "szilveszter.safar@gmail.com",
+    "license": "MIT",
+    "devDependencies": {
+        "@types/jest": "^27.4.0",
+        "@typescript-eslint/eslint-plugin": "^5.10.2",
+        "@typescript-eslint/parser": "^5.10.2",
+        "eslint": "^7.32.0",
+        "jest": "^27.4.5",
+        "nanoid": "^3.2.0",
+        "rimraf": "^3.0.2",
+        "ts-jest": "^27.1.2",
+        "typedoc": "^0.22.10",
+        "typescript": "^4.5.2"
+    }
+}
