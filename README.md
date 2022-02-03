@@ -77,7 +77,7 @@ The channel can be any means of sending messages to the other side. Here's the i
 interface RPCChannel {
     sendSync?: (message: RPC_Message) => any;
     sendAsync?: (message: RPC_Message) => void;
-    receive?: (callback: (message: RPC_Message, replyChannel?: RPCChannel) => void) => void;
+    receive?: (callback: (message: RPC_Message, replyChannel?: RPCChannel, context?: any) => void) => void;
 }
 ```
 The user must provide an object with these functions to the `connect()` method.
