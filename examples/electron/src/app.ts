@@ -1,8 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { nanoid } from 'nanoid/non-secure';
 import * as path from 'path';
-import { RPC_Message } from '../../../dist/rpc-message-types';
-import { RPCChannel, SuperRPC } from '../../../dist/super-rpc';
+import { RPCChannel, RPC_Message, SuperRPC } from '../../../dist';
 
 const preloadPath = path.resolve(path.join(__dirname, './preload.js'));
 

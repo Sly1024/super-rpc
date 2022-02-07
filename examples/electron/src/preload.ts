@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { RPCChannel } from '../../../dist/super-rpc';
-import { RPC_Message } from '../../../dist/rpc-message-types';
+import type { RPCChannel, RPC_Message } from '../../../dist';
 
 // a communication channel
 const channel: RPCChannel = {

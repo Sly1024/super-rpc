@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid/non-secure';
-import { RPCChannel, SuperRPC } from '../../../dist/super-rpc';
+import { RPCChannel, SuperRPC } from '../../../dist';
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 
 // this is exposed by the preload script as a global object
