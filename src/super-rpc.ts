@@ -275,7 +275,7 @@ export class SuperRPC {
                 }
                 case 'method_call': {
                     scope = target;
-                    descriptor = getFunctionDescriptor(entry.descriptor as ObjectDescriptor, msg.prop);
+                    descriptor = getFunctionDescriptor(descriptor as ObjectDescriptor, msg.prop);
                     target = target[msg.prop];
                     if (typeof target !== 'function') throw new Error(`Property ${msg.prop} is not a function on object ${msg.objId}`);
                     // NO break here!
@@ -295,7 +295,7 @@ export class SuperRPC {
                 Promise.resolve(result)
                     .then(value => result = this.processBeforeSerialization(value, replyChannel), err => { result = err?.toString?.(); success = false; })
                     .then(() => this.sendAsync({ action: 'fn_reply', callType: 'async', success, result, callId: msg.callId }, replyChannel));
-            } else {
+            } else if (msg.callType === 'sync') {
                 result = this.processBeforeSerialization(result, replyChannel);
             }
         } catch (err: any) {
@@ -406,7 +406,8 @@ export class SuperRPC {
                 if ((fn as any)[rpc_disposed]) throw new Error('Remote function has been disposed');
                 _this.callId++;
                 _this.sendAsync({
-                    action, callType: 'async',
+                    action,
+                    callType: 'async',
                     objId: objId ?? this[proxyObjectId],
                     callId: _this.callId,
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

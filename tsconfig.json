@@ -1,12 +1,13 @@
 {
     "compilerOptions": {
-        "outDir": "./dist",
-        "module": "commonjs",
+        "outDir": "./dist/esm",
+        "module": "ESNext",
         "target": "ESNext",
         "moduleResolution": "Node",
         "rootDir": "./src",
         "declaration": true,
         "sourceMap": true,
+        "inlineSources": true,
         "strict": true,
         "esModuleInterop": true
     },
