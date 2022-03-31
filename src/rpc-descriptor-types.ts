@@ -130,9 +130,10 @@ export interface ClassDescriptor {
     instance?: ObjectDescriptor;
 }
 
-export type Descriptor = ObjectDescriptor | FunctionDescriptor | PropertyDescriptor;
+export type Descriptor = ObjectDescriptor | FunctionDescriptor | PropertyDescriptor | ClassDescriptor;
 
-export type ObjectDescriptors = { [key: string]: ObjectDescriptorWithProps | FunctionDescriptor };
+export type ObjectDescriptors = { [key: string]: ObjectDescriptorWithProps };
+export type FunctionDescriptors = { [key: string]: FunctionDescriptor };
 export type ClassDescriptors = { [key: string]: ClassDescriptor };
 
 // util functions
@@ -154,4 +155,26 @@ export function getPropertyDescriptor(descriptor?: ObjectDescriptor, propName?: 
 
 export function isFunctionDescriptor(descriptor?: Descriptor): descriptor is FunctionDescriptor {
     return descriptor?.type === 'function';
+}
+
+export type AnyConstructor = new (...args: any[]) => any;
+export type AnyFunction = ((...args: any[]) => any);
+
+export function processFunctionDescriptor(descriptor: string|FunctionDescriptor, func: AnyFunction) {
+    if (typeof descriptor === 'string') descriptor = { name: descriptor, type: 'function' };
+    descriptor ??= { type: 'function' };
+    descriptor.name ??= func.name;
+    return descriptor;
+}
+
+export function processObjectDescriptor(descriptor: ObjectDescriptor, obj: any) {
+    descriptor ??= { type: 'object' };
+
+    if (obj && descriptor.functions) {
+        for (const [idx, fdescr] of descriptor.functions.entries()) {
+            descriptor.functions[idx] = processFunctionDescriptor(fdescr, obj[getPropName(fdescr)]);
+        }
+    }
+
+    return descriptor;
 }

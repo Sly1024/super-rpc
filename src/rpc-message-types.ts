@@ -7,19 +7,24 @@
  */
 
 import type { ClassDescriptors, ObjectDescriptors } from './rpc-descriptor-types';
+import { FunctionDescriptors } from './rpc-descriptor-types';
 
 export type RPC_Marker = { rpc_marker?: 'srpc' };
 
 // descriptor request & response
 export type RPC_GetDescriptorsMessage = RPC_Marker & { action: 'get_descriptors' };
-export type RPC_DescriptorsResultMessage = RPC_Marker & { action: 'descriptors', objects: ObjectDescriptors, classes: ClassDescriptors };
+export type RPC_DescriptorsResultMessage = RPC_Marker & { action: 'descriptors',
+    objects: ObjectDescriptors,
+    functions: FunctionDescriptors,
+    classes: ClassDescriptors
+};
 
 // function call messages
 export type RPC_FnCallMessageBase = RPC_Marker & { objId: string, args: any[] };
 //  - 3 types (void, sync, async), only async needs a callId for correlating the response message
 export type RPC_VoidFnCallMessage = RPC_FnCallMessageBase & { callType: 'void' };
 export type RPC_SyncFnCallMessage = RPC_FnCallMessageBase & { callType: 'sync' };
-export type RPC_AsyncFnCallMessage = RPC_FnCallMessageBase & { callType: 'async', callId: number | string };
+export type RPC_AsyncFnCallMessage = RPC_FnCallMessageBase & { callType: 'async', callId: string };
 export type RPC_AnyCallTypeFnCallMessage = RPC_VoidFnCallMessage | RPC_SyncFnCallMessage | RPC_AsyncFnCallMessage;
 //  - different actions may have different calltypes
 export type RPC_FnCallMessage = { action: 'fn_call' } & RPC_AnyCallTypeFnCallMessage;
@@ -39,7 +44,7 @@ export type RPC_AsyncCallAction = (RPC_AnyCallMessage & { callType: 'async' })['
 // function call result messages
 export type RPC_FnResultMessageBase = RPC_Marker & { action: 'fn_reply', success: boolean; result: any };
 export type RPC_SyncFnResultMessage = RPC_FnResultMessageBase & { callType: 'sync' };
-export type RPC_AsyncFnResultMessage = RPC_FnResultMessageBase & { callType: 'async', callId: number | string };
+export type RPC_AsyncFnResultMessage = RPC_FnResultMessageBase & { callType: 'async', callId: string };
 export type RPC_FnResultMessage = RPC_SyncFnResultMessage | RPC_AsyncFnResultMessage;
 
 export type RPC_ObjectDiedMessage = RPC_Marker & { action: 'obj_died', objId: string };

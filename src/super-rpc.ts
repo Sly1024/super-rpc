@@ -1,7 +1,10 @@
-import { rpc_disposed, ProxyObjectRegistry } from './proxy-object-registry';
+import { ProxyObjectRegistry, rpc_disposed } from './proxy-object-registry';
+import { processObjectDescriptor, processFunctionDescriptor } from './rpc-descriptor-types';
 import {
+    AnyConstructor,
+    AnyFunction,
     ClassDescriptor, ClassDescriptors, Descriptor,
-    FunctionDescriptor, FunctionReturnBehavior,
+    FunctionDescriptor, FunctionDescriptors, FunctionReturnBehavior,
     getArgumentDescriptor, getFunctionDescriptor, getPropertyDescriptor, getPropName,
     isFunctionDescriptor, ObjectDescriptor, ObjectDescriptors, ObjectDescriptorWithProps
 } from './rpc-descriptor-types';
@@ -17,19 +20,10 @@ type PromiseCallbacks = {
     reject: (data?: any) => void;
 };
 
-export type AnyConstructor = new (...args: any[]) => any;
-export type AnyFunction = ((...args: any[]) => any);
-
-type ClassRegistryEntry = {
-    descriptor: ClassDescriptor;
-    classCtor: AnyConstructor;
-};
-
-type HostObjectRegistryEntry = {
+type HostRegistryEntry<TDescriptor extends Descriptor> = {
     target: any;
-    descriptor: FunctionDescriptor | ObjectDescriptor;
+    descriptor: TDescriptor;
 };
-
 
 const hostObjectId = Symbol('hostObjectId');
 const proxyObjectId = Symbol('proxyObjectId');
@@ -77,16 +71,18 @@ export class SuperRPC {
     private channel!: RPCChannel;
 
     private remoteObjectDescriptors?: ObjectDescriptors;
+    private remoteFunctionDescriptors?: FunctionDescriptors;
     private remoteClassDescriptors?: ClassDescriptors;
     private remoteDescriptorsCallbacks?: PromiseCallbacks;
 
-    private asyncCallbacks = new Map<number|string, PromiseCallbacks>();
+    private asyncCallbacks = new Map<string, PromiseCallbacks>();
     private callId = 0;
 
     private readonly proxyObjectRegistry = new ProxyObjectRegistry();
     private readonly proxyClassRegistry = new Map<string, AnyConstructor>();
-    private readonly hostObjectRegistry = new Map<string, HostObjectRegistryEntry>();
-    private readonly hostClassRegistry = new Map<string, ClassRegistryEntry>();
+    private readonly hostObjectRegistry = new Map<string, HostRegistryEntry<ObjectDescriptor>>();
+    private readonly hostFunctionRegistry = new Map<string, HostRegistryEntry<FunctionDescriptor>>();
+    private readonly hostClassRegistry = new Map<string, HostRegistryEntry<ClassDescriptor>>();
 
     /**
      * @param objectIdGenerator A function to generate a unique ID for an object.
@@ -129,10 +125,10 @@ export class SuperRPC {
      * @param target The target function
      * @param descriptor Describes arguments and return behavior ([[FunctionReturnBehavior]])
      */
-    registerHostFunction(objId: string, target: AnyFunction, descriptor: FunctionDescriptor) {
+    registerHostFunction(objId: string, target: AnyFunction, descriptor: FunctionDescriptor = {}) {
         descriptor.type = 'function';
         (target as any)[hostObjectId] = objId;
-        this.hostObjectRegistry.set(objId, { target, descriptor });
+        this.hostFunctionRegistry.set(objId, { target, descriptor });
     }
 
     /**
@@ -158,11 +154,11 @@ export class SuperRPC {
         }
 
         if (descriptor.ctor) {
-            this.registerHostFunction(classId + '.ctor', <any>classCtor, descriptor.ctor);
+            this.registerHostFunction(classId, <any>classCtor, descriptor.ctor);
         }
 
         (classCtor as any)[classIdSym] = classId;
-        this.hostClassRegistry.set(classId, { classCtor, descriptor });
+        this.hostClassRegistry.set(classId, { target: classCtor, descriptor });
     }
 
     /**
@@ -183,12 +179,18 @@ export class SuperRPC {
     }
 
     private setRemoteDescriptors(response: RPC_DescriptorsResultMessage) {
-        if (typeof response === 'object' && response.objects && response.classes) {
-            this.remoteObjectDescriptors = response.objects;
+        if (typeof response !== 'object') return false;
+
+        if (response.classes) {
             this.remoteClassDescriptors = response.classes;
-            return true;
         }
-        return false;
+        if (response.objects) {
+            this.remoteObjectDescriptors = response.objects;
+        }
+        if (response.functions) {
+            this.remoteFunctionDescriptors = response.functions;
+        }
+        return true;
     }
 
     /**
@@ -199,28 +201,33 @@ export class SuperRPC {
     sendRemoteDescriptors(replyChannel = this.channel) {
         this.sendSyncIfPossible({
             action: 'descriptors',
-            objects: this.getLocalDescriptors(this.hostObjectRegistry),
+            objects: this.getLocalDescriptors(this.hostObjectRegistry, processObjectDescriptor),
+            functions: this.getLocalDescriptors(this.hostFunctionRegistry, processFunctionDescriptor),
             classes: this.getLocalDescriptors(this.hostClassRegistry),
         }, replyChannel);
     }
 
-    private getLocalDescriptors<T extends HostObjectRegistryEntry|ClassRegistryEntry>(registry: Map<string, T>):
-        T extends HostObjectRegistryEntry ? ObjectDescriptors : ClassDescriptors
+    private getLocalDescriptors<T extends ObjectDescriptor|FunctionDescriptor|ClassDescriptor>(
+        registry: Map<string, HostRegistryEntry<T>>,
+        processFn?: (descr: T, obj: any) => T
+    ): T extends ObjectDescriptor ? ObjectDescriptors : T extends FunctionDescriptor ? FunctionDescriptors : ClassDescriptors
     {
         const descriptors: any = {};
         for (const key of registry.keys()) {
             // .get() could return undefined, but we know it will never do that, since we iterate over existing keys
             // therefore it is safe to cast it to the entry types
-            const entry = <ClassRegistryEntry|HostObjectRegistryEntry>registry.get(key);
+            const entry = <HostRegistryEntry<T>>registry.get(key);
 
             if (!entry.descriptor) continue;
 
-            const descr = descriptors[key] = { ...entry.descriptor };
+            let descr = <T>{ ...entry.descriptor };
+            descr = processFn?.(descr, entry.target) ?? descr;
+            descriptors[key] = descr;
 
             if (entry.descriptor.type === 'object' && entry.descriptor.readonlyProperties) {
                 const props: any = {};
                 for (const prop of entry.descriptor.readonlyProperties) {
-                    props[prop] = (entry as HostObjectRegistryEntry).target[prop];
+                    props[prop] = (entry as HostRegistryEntry<ObjectDescriptor>).target[prop];
                 }
                 (descr as ObjectDescriptorWithProps).props = props;
             }
@@ -255,7 +262,7 @@ export class SuperRPC {
     }
 
     private callTargetFunction(msg: RPC_AnyCallMessage, replyChannel = this.channel) {
-        const entry = this.hostObjectRegistry.get(msg.objId);
+        const entry = (msg.action === 'fn_call' || msg.action === 'ctor_call' ? this.hostFunctionRegistry : this.hostObjectRegistry).get(msg.objId);
         let result: any;
         let success = true;
         try {
@@ -270,7 +277,13 @@ export class SuperRPC {
                 }
                 case 'prop_set': {
                     const descr = getPropertyDescriptor(descriptor as ObjectDescriptor, msg.prop);
-                    target[msg.prop] = this.processAfterSerialization(msg.args[0], replyChannel, descr?.get?.arguments?.[0]);
+                    const result = this.processAfterDeserialization(msg.args[0], replyChannel, descr?.get?.arguments?.[0]);
+                    // special case for when the property getter is async and the setter gets a Promise
+                    if (result?.constructor === Promise && (descr?.get?.returns === 'async' || !replyChannel.sendSync)) {
+                        result.then((value: any) => target[msg.prop] = value);
+                    } else {
+                        target[msg.prop] = result;
+                    }
                     break;
                 }
                 case 'method_call': {
@@ -338,7 +351,7 @@ export class SuperRPC {
                 }
                 case 'fn_reply': {
                     if (message.callType === 'async') {
-                        const result = this.processAfterSerialization(message.result, replyChannel);
+                        const result = this.processAfterDeserialization(message.result, replyChannel);
                         const callbacks = this.asyncCallbacks.get(message.callId);
                         callbacks?.[message.success ? 'resolve' : 'reject'](result);
                         this.asyncCallbacks.delete(message.callId);
@@ -355,7 +368,7 @@ export class SuperRPC {
     }
 
     private deserializeFunctionArgs(func: FunctionDescriptor, args: any[], replyChannel: RPCChannel) {
-        return args.map((arg, idx) => this.processAfterSerialization(arg, replyChannel, getArgumentDescriptor(func, idx)));
+        return args.map((arg, idx) => this.processAfterDeserialization(arg, replyChannel, getArgumentDescriptor(func, idx)));
     }
 
     private createVoidProxyFunction(objId: string|null, func: FunctionDescriptor, action: RPC_VoidCallAction, replyChannel: RPCChannel) {
@@ -393,7 +406,7 @@ export class SuperRPC {
             if (!_this.checkMarker(response)) throw new Error(`Invalid response ${JSON.stringify(response)}`);
 
             if (!response.success) throw new Error(response.result);
-            return _this.processAfterSerialization(response.result, replyChannel);
+            return _this.processAfterDeserialization(response.result, replyChannel);
         };
         return fn;
     }
@@ -409,12 +422,12 @@ export class SuperRPC {
                     action,
                     callType: 'async',
                     objId: objId ?? this[proxyObjectId],
-                    callId: _this.callId,
+                    callId: _this.callId.toString(),
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
                     prop: func.name!,
                     args: _this.serializeFunctionArgs(func, args, replyChannel)
                 }, replyChannel);
-                _this.asyncCallbacks.set(_this.callId, { resolve, reject });
+                _this.asyncCallbacks.set(_this.callId.toString(), { resolve, reject });
             });
         };
         return fn;
@@ -455,11 +468,28 @@ export class SuperRPC {
             throw new Error(`No object registered with ID '${objId}'`);
         }
 
-        if (isFunctionDescriptor(descriptor)) {
-            obj = this.createProxyFunction(objId, descriptor, 'fn_call');
-        } else {
-            obj = this.createProxyObject(objId, descriptor);
+        obj = this.createProxyObject(objId, descriptor);
+
+        this.proxyObjectRegistry.register(objId, obj);
+        return obj;
+    }
+
+    /**
+     * Gets or creates a proxy function that represents a host object from the other side.
+     *
+     * This side must have the descriptor for the function.
+     * See [[sendRemoteDescriptors]], [[requestRemoteDescriptors]].
+     */
+    getProxyFunction(objId: string) {
+        let obj: any = this.proxyObjectRegistry.get(objId);
+        if (obj) return obj;
+
+        const descriptor = this.remoteFunctionDescriptors?.[objId];
+        if (!descriptor) {
+            throw new Error(`No function registered with ID '${objId}'`);
         }
+
+        obj = this.createProxyFunction(objId, descriptor, 'fn_call');
 
         this.proxyObjectRegistry.register(objId, obj);
         return obj;
@@ -483,7 +513,7 @@ export class SuperRPC {
             throw new Error(`No class registered with ID '${classId}'`);
         }
 
-        clazz = <AnyConstructor>(descriptor.ctor ? this.createProxyFunction(classId + '.ctor', descriptor.ctor, 'ctor_call', 'sync')
+        clazz = <AnyConstructor>(descriptor.ctor ? this.createProxyFunction(classId, descriptor.ctor, 'ctor_call', 'sync')
             : function () { throw new Error(`Constructor of class '${classId}' is not defined`); });
 
         // create the proxy functions/properties on the prototype with no objId, so each function will look up "proxyObjectId" on "this"
@@ -525,11 +555,20 @@ export class SuperRPC {
         return obj;
     }
 
-    private registerLocalObj(obj: any, descriptor: FunctionDescriptor | ObjectDescriptor) {
+    private registerLocalObj(obj: any, descriptor: ObjectDescriptor): string {
         let objId = obj[hostObjectId];
         if (!this.hostObjectRegistry.has(objId)) {
             objId = this.objectIdGenerator();
             this.hostObjectRegistry.set(objId, { target: obj, descriptor });
+            obj[hostObjectId] = objId;
+        }
+        return objId;
+    }
+    private registerLocalFunc(obj: any, descriptor: FunctionDescriptor): string {
+        let objId = obj[hostObjectId];
+        if (!this.hostFunctionRegistry.has(objId)) {
+            objId = this.objectIdGenerator();
+            this.hostFunctionRegistry.set(objId, { target: obj, descriptor });
             obj[hostObjectId] = objId;
         }
         return objId;
@@ -577,14 +616,14 @@ export class SuperRPC {
                 break;
             }
             case 'function': {
-                const objId = this.registerLocalObj(obj, descriptor as FunctionDescriptor);
+                const objId = this.registerLocalFunc(obj, descriptor as FunctionDescriptor);
                 return { _rpc_type: 'function', objId };
             }
         }
         return obj;
     }
 
-    private processAfterSerialization(obj: any, replyChannel: RPCChannel, descriptor?: Descriptor) {
+    private processAfterDeserialization(obj: any, replyChannel: RPCChannel, descriptor?: Descriptor) {
         if (typeof obj !== 'object' || !obj) return obj;
 
         switch (obj._rpc_type) {
@@ -600,7 +639,7 @@ export class SuperRPC {
         }
 
         for (const key of Object.keys(obj)) {
-            obj[key] = this.processAfterSerialization(obj[key], replyChannel, getPropertyDescriptor(descriptor as ObjectDescriptor, key));
+            obj[key] = this.processAfterDeserialization(obj[key], replyChannel, getPropertyDescriptor(descriptor as ObjectDescriptor, key));
         }
 
         return obj;
