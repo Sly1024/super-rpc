@@ -52,13 +52,13 @@ export interface PropertyDescriptor {
      * The setter of the property.
      * Default return behavior is 'sync'.
      */
-    set?: FunctionDescriptor<'void' | 'sync'>;
+    set?: FunctionDescriptor;
 
     /**
      * If `true` then no setter will be generated for the proxy property.
      * @default false
      */
-    readonly?: boolean;
+    getOnly?: boolean;
 }
 
 /**
@@ -93,6 +93,12 @@ export interface ObjectDescriptor {
      * Since readonly property values don't change, they are sent to the other side, instead of generating a getter.
      */
     readonlyProperties?: string[];
+
+    /**
+     * In case of a string, it is the name of the event.
+     * In case of a `FunctionDescriptor` the `Name` property is the event name, the rest applies to the handler function.
+     */
+    events?: (string|FunctionDescriptor)[];
 }
 
 export interface ObjectDescriptorWithProps extends ObjectDescriptor {
@@ -151,6 +157,10 @@ export function getFunctionDescriptor(descriptor: ObjectDescriptor, funcName: st
 
 export function getPropertyDescriptor(descriptor?: ObjectDescriptor, propName?: string) {
     return <PropertyDescriptor>descriptor?.proxiedProperties?.find(prop => typeof prop === 'object' && prop.name === propName);
+}
+
+export function getEventDescriptor(descriptor?: ObjectDescriptor, eventName?: string) {
+    return <FunctionDescriptor>descriptor?.events?.find(evt => typeof evt === 'object' && evt.name === eventName);
 }
 
 export function isFunctionDescriptor(descriptor?: Descriptor): descriptor is FunctionDescriptor {
