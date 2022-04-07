@@ -1,8 +1,9 @@
-import { AnyConstructor, RPCChannel, SuperRPC } from '../src/super-rpc';
+import { RPCChannel, SuperRPC } from '../src/super-rpc';
 import { RPC_Message } from '../src/rpc-message-types';
 import { nanoid } from 'nanoid/non-secure';
 import { waitForAllTimers } from './utils';
 import { rpc_disposeFunc } from '../src/proxy-object-registry';
+import { AnyConstructor } from '../src/rpc-descriptor-types';
 
 describe('SuperRPC', () => {
     let channel1: RPCChannel;
@@ -199,7 +200,7 @@ describe('SuperRPC', () => {
             const hostFunc = jest.fn(x => x * 2);
             rpc1.registerHostFunction('host_func', hostFunc, { returns: 'sync' });
             rpc1.sendRemoteDescriptors();
-            const proxyFunc = rpc2.getProxyObject('host_func');
+            const proxyFunc = rpc2.getProxyFunction('host_func');
 
             const result = proxyFunc(7);
 
@@ -212,7 +213,7 @@ describe('SuperRPC', () => {
             const hostFunc = jest.fn(() => { throw new Error('error1'); });
             rpc1.registerHostFunction('host_func', hostFunc, { returns: 'sync' });
             rpc1.sendRemoteDescriptors();
-            const proxyFunc = rpc2.getProxyObject('host_func');
+            const proxyFunc = rpc2.getProxyFunction('host_func');
 
             expect(() => proxyFunc(7)).toThrowError();
         });
@@ -222,7 +223,7 @@ describe('SuperRPC', () => {
             const hostFunc = jest.fn(x => Promise.resolve(x * 2));
             rpc1.registerHostFunction('host_func', hostFunc, { returns: 'async' });
             rpc1.sendRemoteDescriptors();
-            const proxyFunc = rpc2.getProxyObject('host_func');
+            const proxyFunc = rpc2.getProxyFunction('host_func');
 
             const result = await proxyFunc(7);
 
@@ -235,7 +236,7 @@ describe('SuperRPC', () => {
             const hostFunc = jest.fn(() => Promise.reject('error'));
             rpc1.registerHostFunction('host_func', hostFunc, { returns: 'async' });
             rpc1.sendRemoteDescriptors();
-            const proxyFunc = rpc2.getProxyObject('host_func');
+            const proxyFunc = rpc2.getProxyFunction('host_func');
 
             await expect(proxyFunc(7)).rejects.toMatch('error');
         });
@@ -511,15 +512,15 @@ describe('SuperRPC', () => {
             rpc1.registerHostFunction('f3', jest.fn(), { returns: 'async' });
             rpc1.sendRemoteDescriptors();
 
-            const proxyFunc1 = rpc2.getProxyObject('f1');
+            const proxyFunc1 = rpc2.getProxyFunction('f1');
             proxyFunc1[rpc_disposeFunc]();
             expect(() => { proxyFunc1(); }).toThrowError();
 
-            const proxyFunc2 = rpc2.getProxyObject('f2');
+            const proxyFunc2 = rpc2.getProxyFunction('f2');
             proxyFunc2[rpc_disposeFunc]();
             expect(() => { proxyFunc2(); }).toThrowError();
 
-            const proxyFunc3 = rpc2.getProxyObject('f3');
+            const proxyFunc3 = rpc2.getProxyFunction('f3');
             proxyFunc3[rpc_disposeFunc]();
             await expect(() => proxyFunc3()).rejects.toThrowError();
         });
@@ -528,7 +529,7 @@ describe('SuperRPC', () => {
             rpc1.registerHostFunction('ferr', (() => { throw new Error('error'); }), { returns: 'async' });
             rpc1.sendRemoteDescriptors();
 
-            const proxyFunc = rpc2.getProxyObject('ferr');
+            const proxyFunc = rpc2.getProxyFunction('ferr');
             await expect(proxyFunc()).rejects.toMatch('error');
         });
     });
@@ -568,7 +569,7 @@ describe('SuperRPC', () => {
             rpc1.registerHostFunction('fpromise', giveMeAPromise, { });
             rpc1.sendRemoteDescriptors();
 
-            const proxyGiveMeAPromise = rpc2.getProxyObject('fpromise');
+            const proxyGiveMeAPromise = rpc2.getProxyFunction('fpromise');
 
             const result = await proxyGiveMeAPromise(async (p: Promise<string>) => ('well' + await p));
             expect(result).toEqual('welldone');
@@ -579,7 +580,7 @@ describe('SuperRPC', () => {
             rpc1.registerHostFunction('fpromise2', giveMeAPromise, { });
             rpc1.sendRemoteDescriptors();
 
-            const proxyGiveMeAPromise = rpc2.getProxyObject('fpromise2');
+            const proxyGiveMeAPromise = rpc2.getProxyFunction('fpromise2');
             await expect(proxyGiveMeAPromise(async (p: Promise<string>) => ('well' + await p))).rejects.toMatch('BOOM');
         });
 

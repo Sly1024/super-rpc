@@ -621,7 +621,7 @@ export class SuperRPC {
 
     private processBeforeSerialization(obj: any, replyChannel: RPCChannel, descriptor?: Descriptor) {
         if (obj?.[proxyObjectId]) {
-            return { _rpc_type: 'hostObject', objId: obj[proxyObjectId] };
+            return { _rpc_type: 'host' + (typeof obj), objId: obj[proxyObjectId] };
         }
 
         switch (typeof obj) {
@@ -678,8 +678,11 @@ export class SuperRPC {
             case 'function': {
                 return this.getOrCreateProxyFunction(obj.objId, replyChannel, descriptor as FunctionDescriptor);
             }
-            case 'hostObject': {
+            case 'hostobject': {
                 return this.hostObjectRegistry.get(obj.objId)?.target;
+            }
+            case 'hostfunction': {
+                return this.hostFunctionRegistry.get(obj.objId)?.target;
             }
         }
 
