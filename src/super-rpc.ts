@@ -362,6 +362,7 @@ export class SuperRPC {
                 }
                 case 'obj_died': {
                     this.hostObjectRegistry.delete(message.objId);
+                    this.hostFunctionRegistry.delete(message.objId);
                     break;
                 }
                 case 'fn_reply': {
@@ -580,7 +581,7 @@ export class SuperRPC {
                     proxyFunc = <AnyFunction>_this.createProxyFunction(objId, descr, 'method_call');
                     addListenerFunctions.set(eventName, proxyFunc);
                 }
-                proxyFunc(listener);
+                proxyFunc.call(this, listener);
             };
             obj.removeEventListener = function (eventName: string, listener: AnyFunction) {
                 if (!eventNames.includes(eventName)) throw new Error(`No "${eventName}" event found on object "${objId}".`);
@@ -591,7 +592,7 @@ export class SuperRPC {
                     proxyFunc = <AnyFunction>_this.createProxyFunction(objId, descr, 'method_call');
                     removeListenerFunctions.set(eventName, proxyFunc);
                 }
-                proxyFunc(listener);
+                proxyFunc.call(this, listener);
             };
         }
 
